@@ -1,2 +1,5 @@
 *.kgml
 *.tsv
+*.h5mu
+
+lmdb/

@@ -4,6 +4,7 @@ import lmdb
 import pandas as pd
 import numpy as np
 import pickle
+from torch_geometric.data import Data
 
 # Read the entire H5MU file into a MuData object
 mdata = mu.read("gse129705.h5mu")
@@ -29,15 +30,16 @@ for i, gene in enumerate(adata.var['genesym']):
 
 # process graphs
 
-graphs_list = os.listdir("./keggs/kegg_path/processed")
+graphs_list = os.listdir("./processed")
 graphs_list.sort()
 
 gene_matrix = []
 
+all_edges = []
 all_masks = []
 
 for graph in graphs_list:
-    folder = "./keggs/kegg_path/processed/{}".format(graph)
+    folder = "./processed/{}".format(graph)
     edge_path = "{}/edges.tsv".format(folder)
     node_path = "{}/nodes.tsv".format(folder)
 
@@ -65,7 +67,7 @@ for graph in graphs_list:
 
     node_index_dict = dict()
 
-
+    # make the edges the smallest number possible
     for i, node in enumerate(nodes):
         node_index_dict[node] = i
     edges[0] = [node_index_dict[n] for n in edges[0]]
@@ -96,6 +98,9 @@ for graph in graphs_list:
 
     genes = [g for g in genes]
     genes.sort()
+
+
+    # make the masks
     masks = [[False] * len(genes) for i in range(len(nodes))]
 
 
@@ -106,6 +111,7 @@ for graph in graphs_list:
         for index in indicies:
             masks[i][index] = True
     
+    all_edges.append(edges)
     gene_matrix.append(genes)
     all_masks.append(masks)
 
@@ -139,8 +145,15 @@ with env.begin(write=True) as txn:
 
             X.append(cur_gene_matrix)
         
-        txn.put(str(i).encode(), pickle.dumps((X, response, id)))
+        input_graphs = []
+        for graph_num in range(len(X)):
+            graph = Data(x=X[graph_num], edge_index = all_edges[graph_num])
+            input_graphs.append(graph)
+        
         print(i)
+        txn.put(str(i).encode(), pickle.dumps((input_graphs, response, id)))
+    
+    txn.put(str("len").encode(), pickle.dumps(len(adata)))
 
 
 # okay, I need to make the graphs next:
